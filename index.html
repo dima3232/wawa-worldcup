@@ -11,7 +11,7 @@
   :root{
     --bg:#0b1020; --bg2:#121a30; --card:#161f3a; --card2:#1b2647;
     --line:#3b4a73; --txt:#e7ecf7; --dim:#8a96b8; --gold:#f4c64a;
-    --green:#3fd07d; --red:#ff6b6b; --accent:#5b8cff; --conn:#3b4a73; --cw:26px; --rh:42px;
+    --green:#3fd07d; --red:#ff6b6b; --accent:#5b8cff; --conn:#4d5d8c; --cw:26px; --rh:42px;
   }
   *{box-sizing:border-box}
   html{margin:0}
@@ -48,9 +48,11 @@
 
   .bracket{position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
   .rounds{display:flex;align-items:center;gap:36px;padding:10px 8px;min-width:max-content;position:relative}
-  .round-col{display:flex;flex-direction:column;justify-content:center;flex:0 0 auto;gap:14px}
+  /* колонки однакової висоти + space-around → кожен матч наступного раунду стоїть рівно
+     по центру між своїми двома фідерами, тож лінії пар не зливаються */
+  .round-col{display:flex;flex-direction:column;justify-content:space-around;flex:0 0 auto}
   svg.conn{position:absolute;top:0;left:0;z-index:0;pointer-events:none}
-  svg.conn path{fill:none;stroke:var(--conn);stroke-width:2}
+  svg.conn path{fill:none;stroke:var(--conn);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
 
   .match{position:relative;z-index:1;width:240px;background:linear-gradient(180deg,var(--card),var(--card2));
     border:1px solid #28335c;border-radius:13px;overflow:hidden;cursor:pointer;
@@ -376,7 +378,7 @@ function buildBracket(){
   });
   root.appendChild(rounds);
   buildRoundTabs();
-  requestAnimationFrame(drawConnectors);
+  requestAnimationFrame(()=>{ layoutBracket(); drawConnectors(); });
 }
 
 // ---- підвкладки раундів (ESPN-стиль): липкі, гортаються, фокус по тапу ----
@@ -427,6 +429,21 @@ function syncActiveTab(){
 }
 
 // ---- SVG-конектори (малюємо за реальними позиціями карток) ----
+// вирівнювання дерева: усі колонки однакової висоти → space-around ставить кожен матч
+// наступного раунду точно по центру між його двома фідерами (лінії пар не зливаються)
+function layoutBracket(){
+  const br = document.getElementById("bracket");
+  const rounds = br && br.querySelector(".rounds");
+  if(!rounds || br.offsetParent===null) return;
+  const cols = [...rounds.querySelectorAll(".round-col")];
+  const sample = rounds.querySelector(".match");
+  if(!cols.length || !sample) return;
+  const matchH = sample.getBoundingClientRect().height;
+  const maxN = Math.max(...cols.map(c=>c.querySelectorAll(".match").length || 1));
+  const gap = 18;
+  const H = Math.round(maxN*(matchH+gap));
+  cols.forEach(c=>{ c.style.height = H+"px"; });
+}
 function drawConnectors(){
   const br = document.getElementById("bracket");
   const rounds = br && br.querySelector(".rounds");
@@ -648,7 +665,7 @@ function show(v){
     document.getElementById("tab-"+k).classList.toggle("active",v===k);
   });
   if(v==="sc") scrollToFocus();
-  if(v==="br") requestAnimationFrame(drawConnectors);  // перемалювати після показу
+  if(v==="br") requestAnimationFrame(()=>{ layoutBracket(); drawConnectors(); });  // перемалювати після показу
 }
 function scrollToFocus(){
   // чекаємо, поки вкладка стане видимою (display:block), потім прокручуємо до актуального дня
@@ -697,7 +714,7 @@ function setHeaderH(){
   let raf=0;
   br.addEventListener("scroll", ()=>{ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(syncActiveTab); }, {passive:true});
   let rt=0;
-  window.addEventListener("resize", ()=>{ clearTimeout(rt); rt=setTimeout(()=>{ setHeaderH(); drawConnectors(); },150); });
+  window.addEventListener("resize", ()=>{ clearTimeout(rt); rt=setTimeout(()=>{ setHeaderH(); layoutBracket(); drawConnectors(); },150); });
   window.addEventListener("load", setHeaderH);
 })();
 
