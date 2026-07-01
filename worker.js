@@ -8,6 +8,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/event.ics") return eventIcs(url);
     if (url.pathname === "/stats")     return statsRoute(url, env);
+    if (url.pathname === "/scores")    return scoresRoute(env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(event, env, ctx) {
@@ -68,21 +69,48 @@ async function hlFetch(env, path) {
   } catch (e) { return null; }
 }
 
-// ---- список матчів ЧС (для маппінгу назв → Highlightly matchId), кеш у KV ----
+// "2 - 1" | {current:"2 - 1"} | null  ->  [2,1] | null
+function parseScorePair(v) {
+  if (!v) return null;
+  const s = typeof v === "string" ? v : (v.current || "");
+  const mt = String(s).match(/(\d+)\s*[-:]\s*(\d+)/);
+  return mt ? [+mt[1], +mt[2]] : null;
+}
+// коротший кеш списку, поки хоч один матч у прямому ефірі (свіжий рахунок), інакше довгий
+function listTtl(matches) {
+  const now = Date.now();
+  const live = matches.some(m => m.ts && now >= m.ts && now < m.ts + FINAL_MS);
+  return live ? 3 * 60 * 1000 : LIST_TTL_MS;
+}
+
+// ---- список матчів ЧС (маппінг назв → matchId + рахунок/статус), кеш у KV ----
 async function getMatchList(env) {
   const cached = await env.WC_STATS.get("hl:matches", "json");
-  if (cached && (Date.now() - cached.ts) < LIST_TTL_MS) return cached.matches;
+  if (cached && (Date.now() - cached.ts) < listTtl(cached.matches)) return cached.matches;
   if ((await budgetLeft(env)) <= 2) return cached ? cached.matches : [];
   const r = await hlFetch(env, `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=100`);
   if (!r || !Array.isArray(r.data)) return cached ? cached.matches : [];
-  const matches = r.data.map(m => ({
-    id: m.id,
-    home: (m.homeTeam || {}).name, away: (m.awayTeam || {}).name,
-    date: (m.date || "").slice(0, 10),
-    ts: Date.parse(m.date) || 0
-  }));
+  const matches = r.data.map(m => {
+    const st = m.state || {}, sc = st.score || {};
+    return {
+      id: m.id,
+      home: (m.homeTeam || {}).name, away: (m.awayTeam || {}).name,
+      date: (m.date || "").slice(0, 10), ts: Date.parse(m.date) || 0,
+      score: parseScorePair(sc.current), pens: parseScorePair(sc.penalties),
+      status: st.description || "", clock: st.clock == null ? null : st.clock
+    };
+  });
   await env.WC_STATS.put("hl:matches", JSON.stringify({ ts: Date.now(), matches }));
   return matches;
+}
+
+// ---- бекап рахунків: увесь список зі свіжими рахунками/статусами (1 запит на всі матчі) ----
+async function scoresRoute(env) {
+  const matches = await getMatchList(env);
+  const out = matches
+    .filter(m => m.score || m.status)
+    .map(m => ({ home: m.home, away: m.away, date: m.date, ts: m.ts, score: m.score, pens: m.pens, status: m.status, clock: m.clock }));
+  return json({ matches: out }, 200, 30);
 }
 
 function extractSide(arr) {

@@ -667,6 +667,25 @@ function showGoals(m, num){
 // ---- статистика матчу (Highlightly через наш Worker /stats) ----
 let statsReq=0;
 const tokset2=s=>((s||"").toLowerCase().match(/[a-z]+/g)||[]).sort().join(" ");
+const pairKeyC=(a,b)=>[tokset2(a),tokset2(b)].sort().join("|");
+
+// Highlightly як резерв рахунків: там, де openfootball ще не має результату — беремо звідти
+async function mergeBackupScores(){
+  let list;
+  try{ const r=await fetch("/scores",{cache:"no-store"}); if(!r.ok) return; list=(await r.json()).matches; }catch(e){ return; }
+  if(!Array.isArray(list)) return;
+  const by={}; list.forEach(x=>{ if(x.home&&x.away) by[pairKeyC(x.home,x.away)]=x; });
+  allMatches.forEach(m=>{
+    if(!m.team1||!m.team2) return;
+    const hl=by[pairKeyC(m.team1,m.team2)]; if(!hl||!hl.score) return;
+    const done=/finish|full|ended|aet|pen|after/i.test(hl.status||"");
+    if(done && !(m.score&&m.score.ft)){          // openfootball ще без фіналу → підставляємо
+      m.score=Object.assign({}, m.score, {ft:hl.score});
+      if(hl.pens) m.score.p=hl.pens;
+      m._src="hl";
+    }
+  });
+}
 async function loadStats(m){
   const box=document.getElementById("m-stats"); if(!box) return;
   box.innerHTML="";
@@ -970,6 +989,7 @@ async function load(){
     allMatches = data.matches||[];
     byNum = {};
     allMatches.forEach(m=>{ if(m.num!=null) byNum[m.num]=m; });
+    await mergeBackupScores();   // Highlightly як бекап там, де openfootball ще не оновився
     standings = computeStandings();
     buildBracket();
     buildSchedule();
