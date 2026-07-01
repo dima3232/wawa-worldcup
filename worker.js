@@ -127,20 +127,6 @@ async function pollLive(env) {
 
 // ---- клієнтський маршрут ----
 async function statsRoute(url, env) {
-  if (url.searchParams.get("debug") === "1") {
-    const hasKey = !!env.HIGHLIGHTLY_KEY;
-    let listCount = -1, fetchStatus = "skip";
-    if (hasKey) {
-      try {
-        const r = await fetch(HL_BASE + `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=100`,
-          { headers: { "x-rapidapi-key": env.HIGHLIGHTLY_KEY } });
-        fetchStatus = r.status;
-        const j = await r.json();
-        listCount = (j.data || []).length;
-      } catch (e) { fetchStatus = "err:" + e.message; }
-    }
-    return json({ hasKey, hasKV: !!env.WC_STATS, budgetLeft: await budgetLeft(env), listCount, fetchStatus });
-  }
   const home = url.searchParams.get("home") || "";
   const away = url.searchParams.get("away") || "";
   const date = url.searchParams.get("date") || "";
