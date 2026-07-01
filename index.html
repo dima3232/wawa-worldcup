@@ -426,7 +426,7 @@ function isPlayed(m){ return !!scorePair(m); }
 // рахунок по стороні матчу: {main, pen} або null (матч не зіграно → прочерк)
 function sideScore(m, side){
   const sp = scorePair(m); if(!sp) return null;
-  const b = sp.ft||sp.et||[];
+  const b = sp.et||sp.ft||[];   // після дод. часу показуємо рахунок ЕТ (він і вирішує переможця)
   return { main: b[side-1], pen: sp.p? sp.p[side-1] : null };
 }
 function teamRow(name, sc, cls){
@@ -617,7 +617,7 @@ function showGoals(m, num){
   const d1=displayTeam(m.team1), d2=displayTeam(m.team2);
   const t1=d1.nm, t2=d2.nm;
   const sp=scorePair(m), dt=cetDate(m.date,m.time);
-  const head = sp? `${(sp.ft||sp.et)[0]} : ${(sp.ft||sp.et)[1]}` : (dt? cetTime(dt)+" "+tzLabel(dt):"—");
+  const head = sp? `${(sp.et||sp.ft)[0]} : ${(sp.et||sp.ft)[1]}` : (dt? cetTime(dt)+" "+tzLabel(dt):"—");
   if(!modalEl){
     modalEl=document.createElement("div"); modalEl.className="modal"; modalEl.id="match-modal";
     modalEl.innerHTML='<div class="modal-card" role="dialog" aria-modal="true"></div>';
@@ -747,7 +747,7 @@ function calEvent(m){                                    // -> {start,end,title,
       t().descMatch(t1,t2),
       rl?t().descRound(rl):"",
       t().descWatch(cetDayLabel(dt), cetTime(dt), tzLabel(dt)),
-      sp?t().descResult((sp.ft||sp.et)[0],(sp.ft||sp.et)[1]):"",
+      sp?t().descResult((sp.et||sp.ft)[0],(sp.et||sp.ft)[1]):"",
       t().descBracket
     ].filter(Boolean).join("\n"),
     loc:m.ground||""
@@ -895,7 +895,7 @@ function buildSchedule(){
       wrap.appendChild(h);
     }
     const sp=scorePair(m), played=!!sp, w=winnerOf(m);
-    const b = sp?(sp.ft||sp.et):[];
+    const b = sp?(sp.et||sp.ft):[];
     const today=cetIsToday(dt), late=cetIsLate(dt), pub=isPubTime(dt);
     const {live, pending}=liveInfo(m);
     const tmRow=(name,score,side)=>{
