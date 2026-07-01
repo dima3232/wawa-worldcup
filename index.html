@@ -176,6 +176,33 @@
     .groups{grid-template-columns:1fr;gap:10px}
     th,td{padding:5px 6px}
   }
+
+  /* ===== модалка матчу (деталі + «у календар») ===== */
+  .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+    background:rgba(6,10,22,.72);backdrop-filter:blur(4px);padding:18px}
+  .modal.show{display:flex}
+  .modal-card{position:relative;width:min(420px,100%);max-height:86vh;overflow:auto;
+    background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid #2a3a66;border-radius:16px;
+    box-shadow:0 22px 60px rgba(0,0,0,.5);padding:22px 18px 18px}
+  .modal-x{position:absolute;top:9px;right:11px;all:unset;cursor:pointer;font-size:23px;line-height:1;color:var(--dim);padding:5px}
+  .modal-x:hover{color:var(--txt)}
+  .m-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin:2px 0 14px}
+  .m-head .m-team{display:flex;flex-direction:column;align-items:center;gap:5px;font-weight:800;text-align:center;font-size:15px}
+  .m-head .m-team .fl{font-size:22px}
+  .m-head .m-score{font-size:20px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .m-meta{display:flex;flex-wrap:wrap;gap:8px 12px;justify-content:center;color:var(--dim);font-size:12px;margin-bottom:14px}
+  .m-meta .chip{background:#0e1530;border:1px solid #2a3a66;border-radius:999px;padding:2px 10px;color:var(--txt);font-weight:700}
+  .m-goals{display:grid;grid-template-columns:1fr 1fr;gap:14px;border-top:1px solid #243057;padding-top:14px}
+  .m-goals .gh{font-size:12px;font-weight:800;color:var(--dim);margin-bottom:6px}
+  .m-goals ul{list-style:none;margin:0;padding:0;font-size:13px;line-height:1.7}
+  .m-goals .none{color:#5a648a}
+  .m-goals .pen{color:var(--dim);font-size:11px}
+  .m-actions{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:7px}
+  .cal-btn{all:unset;cursor:pointer;background:var(--gold);color:#0b1020;font-weight:800;font-size:14px;
+    padding:11px 22px;border-radius:11px;text-align:center;box-shadow:0 4px 14px rgba(244,198,74,.25)}
+  .cal-btn:hover{filter:brightness(1.06)}
+  .cal-hint{color:#5a648a;font-size:11px;text-align:center}
+  .cal-note{color:var(--dim);font-size:12px}
 </style>
 </head>
 <body>
@@ -479,20 +506,91 @@ function finalRows(m){
   return teamRow(m.team1, sideScore(m,1), played?(w===1?"win":w===2?"lose":""):"")
        + teamRow(m.team2, sideScore(m,2), played?(w===2?"win":w===1?"lose":""):"");
 }
-// ---- goals popup ----
+// ---- goals popup (модалка з деталями матчу + кнопкою «у календар») ----
+let modalEl=null;
+function closeModal(){ if(modalEl) modalEl.classList.remove("show"); }
 function showGoals(m, num){
   if(!m){ return; }
   const g1=(m.goals1||[]), g2=(m.goals2||[]);
-  const t1=displayTeam(m.team1).nm, t2=displayTeam(m.team2).nm;
+  const d1=displayTeam(m.team1), d2=displayTeam(m.team2);
+  const t1=d1.nm, t2=d2.nm;
   const sp=scorePair(m), dt=cetDate(m.date,m.time);
-  const head = sp? `${(sp.ft||sp.et)[0]} : ${(sp.ft||sp.et)[1]}` : (dt? cetTime(dt)+" CET":"");
-  alert(
-    `${t1}  ${head}  ${t2}\n`+
-    (m.ground?`📍 ${m.ground}\n`:"")+
-    (dt?`🗓 ${cetDayLabel(dt)}, ${cetTime(dt)} (ЦЄЧ)\n`:"")+
-    `\n⚽ ${t1}:\n`+(g1.length?g1.map(g=>` • ${g.name} ${g.minute}'${g.penalty?" (пен.)":""}`).join("\n"):" —")+
-    `\n\n⚽ ${t2}:\n`+(g2.length?g2.map(g=>` • ${g.name} ${g.minute}'${g.penalty?" (пен.)":""}`).join("\n"):" —")
-  );
+  const head = sp? `${(sp.ft||sp.et)[0]} : ${(sp.ft||sp.et)[1]}` : (dt? cetTime(dt)+" CET":"—");
+  if(!modalEl){
+    modalEl=document.createElement("div"); modalEl.className="modal"; modalEl.id="match-modal";
+    modalEl.innerHTML='<div class="modal-card" role="dialog" aria-modal="true"></div>';
+    modalEl.addEventListener("click", e=>{ if(e.target===modalEl) closeModal(); });
+    document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+    document.body.appendChild(modalEl);
+  }
+  const goalsHtml = side => side.length
+    ? side.map(g=>`<li>${g.name} <b>${g.minute}'</b>${g.penalty?' <span class="pen">(пен.)</span>':""}</li>`).join("")
+    : '<li class="none">—</li>';
+  const rl=roundLabel(m);
+  const card=modalEl.querySelector(".modal-card");
+  card.innerHTML=`
+    <button class="modal-x" aria-label="Закрити">×</button>
+    <div class="m-head">
+      <div class="m-team"><span class="fl">${d1.fl}</span><span>${t1}</span></div>
+      <div class="m-score">${head}</div>
+      <div class="m-team"><span class="fl">${d2.fl}</span><span>${t2}</span></div>
+    </div>
+    <div class="m-meta">
+      ${rl?`<span class="chip">${rl}</span>`:""}
+      ${dt?`<span>🗓 ${cetDayLabel(dt)}, ${cetTime(dt)} (ЦЄЧ)</span>`:""}
+      ${m.ground?`<span>📍 ${m.ground}</span>`:""}
+    </div>
+    <div class="m-goals">
+      <div><div class="gh">⚽ ${t1}</div><ul>${goalsHtml(g1)}</ul></div>
+      <div><div class="gh">⚽ ${t2}</div><ul>${goalsHtml(g2)}</ul></div>
+    </div>
+    <div class="m-actions">
+      ${dt
+        ? `<button class="cal-btn">🗓 Додати в календар</button><div class="cal-hint">.ics — Apple Calendar, Google, Outlook</div>`
+        : `<span class="cal-note">Час матчу ще уточнюється</span>`}
+    </div>`;
+  card.querySelector(".modal-x").onclick=closeModal;
+  const cb=card.querySelector(".cal-btn"); if(cb) cb.onclick=()=>addToCalendar(m, num);
+  modalEl.classList.add("show");
+}
+
+// ---- .ics-подія для матчу (без бекенду: Blob + download) ----
+function pad2(n){ return String(n).padStart(2,"0"); }
+function icsStamp(d){ return d.getUTCFullYear()+pad2(d.getUTCMonth()+1)+pad2(d.getUTCDate())
+  +"T"+pad2(d.getUTCHours())+pad2(d.getUTCMinutes())+pad2(d.getUTCSeconds())+"Z"; }
+function icsEsc(s){ return String(s||"").replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;"); }
+function addToCalendar(m, num){
+  const dt=cetDate(m.date,m.time); if(!dt) return;
+  const t1=displayTeam(m.team1).nm, t2=displayTeam(m.team2).nm, rl=roundLabel(m);
+  const start=dt, end=new Date(dt.getTime()+120*60000);   // матч ≈ 2 год
+  const sp=scorePair(m);
+  const title=`${t1} – ${t2} · ЧС-2026${rl?` (${rl})`:""}`;
+  const desc=[
+    `Матч ЧС-2026 (USA / Canada / Mexico): ${t1} проти ${t2}.`,
+    rl?`Раунд: ${rl}.`:"",
+    `Час показу: ${cetDayLabel(dt)}, ${cetTime(dt)} (ЦЄЧ / CET).`,
+    sp?`Результат: ${(sp.ft||sp.et)[0]}:${(sp.ft||sp.et)[1]}.`:"",
+    `Сітка плей-оф: https://wawa-worldcup.challango.com`
+  ].filter(Boolean).join("\n");
+  const ics=[
+    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//WAWA//WorldCup2026//UK","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    "UID:wc2026-m"+num+"-"+start.getTime()+"@wawa-worldcup",
+    "DTSTAMP:"+icsStamp(new Date()),
+    "DTSTART:"+icsStamp(start),
+    "DTEND:"+icsStamp(end),
+    "SUMMARY:"+icsEsc(title),
+    "DESCRIPTION:"+icsEsc(desc),
+    m.ground?"LOCATION:"+icsEsc(m.ground):"",
+    "BEGIN:VALARM","ACTION:DISPLAY","DESCRIPTION:"+icsEsc(title),"TRIGGER:-PT30M","END:VALARM",
+    "END:VEVENT","END:VCALENDAR"
+  ].filter(Boolean).join("\r\n");
+  const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="wc2026-match"+num+".ics";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1500);
 }
 
 // ---- groups: compute standings (global) ----
