@@ -209,6 +209,21 @@
   .cal-opt:hover{border-color:var(--gold);background:#141d3c}
   .cal-hint{color:#5a648a;font-size:11px;text-align:center;max-width:300px}
   .cal-note{color:var(--dim);font-size:12px}
+  /* статистика матчу в попапі */
+  .m-stats{margin-top:14px}
+  .stats-h{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;
+    margin-bottom:8px;display:flex;align-items:center;gap:8px;border-top:1px solid #243057;padding-top:14px}
+  .stats-live{font-size:10px;font-weight:800;color:var(--green);background:rgba(63,208,125,.13);
+    padding:1px 7px;border-radius:999px;text-transform:none;letter-spacing:0}
+  .stats-load,.stats-none{color:#5a648a;font-size:12px;padding:4px 0}
+  .st-poss{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;font-variant-numeric:tabular-nums}
+  .st-poss .st-bar{flex:1;height:7px;border-radius:999px;background:#2a3a66;overflow:hidden}
+  .st-poss .st-bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
+  .st-poss-lbl{text-align:center;color:var(--dim);font-size:11px;margin:3px 0 6px}
+  .st-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;padding:5px 0;border-top:1px solid #1b2444}
+  .st-row .st-l{text-align:left;font-weight:800;font-variant-numeric:tabular-nums}
+  .st-row .st-r{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+  .st-row .st-m{color:var(--dim);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -290,6 +305,9 @@ const I18N = {
     schedNA:"Розклад поки недоступний.", today:"· сьогодні 🔴", upcoming:"· найближчі ⏭", penaltiesFull:(a,b)=>`пенальті ${a}–${b}`,
     addCal:"🗓 Додати в календар", calHintAll:"Усі три одразу відкривають подію в календарі. ",
     dlIcs:"Завантажити .ics", timeTbd:"Час матчу ще уточнюється",
+    statsTitle:"Статистика матчу", statLoading:"Вантажимо статистику…",
+    statSoon:"Статистика зʼявиться під час матчу", statNA:"Статистика недоступна", statLiveTag:"наживо",
+    stLbl:{possession:"Володіння",xg:"xG",sot:"Удари в створ",shots:"Удари",bigch:"Явні моменти",corners:"Кутові",offsides:"Офсайди",fouls:"Фоли",cards:"Картки"},
     descMatch:(a,b)=>`Матч ЧС-2026 (USA / Canada / Mexico): ${a} проти ${b}.`, descRound:r=>`Раунд: ${r}.`,
     descWatch:(d,tm,z)=>`Час показу: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Результат: ${a}:${b}.`,
     descBracket:"Сітка плей-оф: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · ЧС-2026${r?` (${r})`:""}`,
@@ -315,6 +333,9 @@ const I18N = {
     schedNA:"Schedule not available yet.", today:"· today 🔴", upcoming:"· up next ⏭", penaltiesFull:(a,b)=>`penalties ${a}–${b}`,
     addCal:"🗓 Add to calendar", calHintAll:"All three open the event in your calendar. ",
     dlIcs:"Download .ics", timeTbd:"Kick-off time TBD",
+    statsTitle:"Match statistics", statLoading:"Loading statistics…",
+    statSoon:"Stats appear after kick-off", statNA:"Statistics unavailable", statLiveTag:"live",
+    stLbl:{possession:"Possession",xg:"xG",sot:"Shots on target",shots:"Shots",bigch:"Big chances",corners:"Corners",offsides:"Offsides",fouls:"Fouls",cards:"Cards"},
     descMatch:(a,b)=>`World Cup 2026 match (USA / Canada / Mexico): ${a} vs ${b}.`, descRound:r=>`Round: ${r}.`,
     descWatch:(d,tm,z)=>`Kick-off: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Result: ${a}:${b}.`,
     descBracket:"Playoff bracket: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · WC 2026${r?` (${r})`:""}`,
@@ -625,6 +646,7 @@ function showGoals(m, num){
       <div><div class="gh">⚽ ${t1}</div><ul>${goalsHtml(g1)}</ul></div>
       <div><div class="gh">⚽ ${t2}</div><ul>${goalsHtml(g2)}</ul></div>
     </div>
+    <div class="m-stats" id="m-stats"></div>
     <div class="m-actions">
       ${dt ? `
         <div class="cal-title">${t().addCal}</div>
@@ -639,6 +661,55 @@ function showGoals(m, num){
   card.querySelector(".modal-x").onclick=closeModal;
   const fb=card.querySelector(".ics-fallback"); if(fb) fb.onclick=e=>{ e.preventDefault(); addToCalendar(m, num); };
   modalEl.classList.add("show");
+  loadStats(m);
+}
+
+// ---- статистика матчу (Highlightly через наш Worker /stats) ----
+let statsReq=0;
+const tokset2=s=>((s||"").toLowerCase().match(/[a-z]+/g)||[]).sort().join(" ");
+async function loadStats(m){
+  const box=document.getElementById("m-stats"); if(!box) return;
+  box.innerHTML="";
+  const d1=displayTeam(m.team1), d2=displayTeam(m.team2);
+  if(!m.team1||!m.team2||d1.prov||d2.prov) return;         // команди ще не відомі
+  const dt=cetDate(m.date,m.time);
+  if(!dt || Date.now() < dt.getTime()) return;             // матч ще не почався
+  const T=t();
+  box.innerHTML=`<div class="stats-h">${T.statsTitle}</div><div class="stats-load">${T.statLoading}</div>`;
+  const my=++statsReq;
+  try{
+    const u=`/stats?home=${encodeURIComponent(m.team1)}&away=${encodeURIComponent(m.team2)}&date=${encodeURIComponent(m.date||"")}`;
+    const data=await (await fetch(u,{cache:"no-store"})).json();
+    if(my!==statsReq) return;                              // відкрили інший матч
+    renderStats(box, data, m);
+  }catch(e){ if(my===statsReq) box.innerHTML=`<div class="stats-h">${T.statsTitle}</div><div class="stats-none">${t().statNA}</div>`; }
+}
+function renderStats(box, data, m){
+  const T=t();
+  if(!data || data.status!=="ok"){
+    const msg = data && data.status==="pending" ? T.statSoon : "";
+    box.innerHTML = msg ? `<div class="stats-h">${T.statsTitle}</div><div class="stats-none">${msg}</div>` : "";
+    return;
+  }
+  let L=data.home, R=data.away;                            // зорієнтувати під team1(зліва)/team2(справа)
+  if(tokset2(data.home.name)!==tokset2(m.team1) && tokset2(data.away.name)===tokset2(m.team1)){ L=data.away; R=data.home; }
+  const ls=L.s||{}, rs=R.s||{};
+  const num=(v,dec)=> v==null?"–":(dec?(+v).toFixed(2):(typeof v==="number"?Math.round(v):v));
+  let rows="";
+  if(ls.possession!=null || rs.possession!=null){
+    const lp=Math.round((+ls.possession||0)*100), rp=Math.round((+rs.possession||0)*100);
+    rows+=`<div class="st-poss"><span>${lp}%</span><div class="st-bar"><i style="width:${lp}%"></i></div><span>${rp}%</span></div>
+           <div class="st-poss-lbl">${T.stLbl.possession}</div>`;
+  }
+  for(const k of ["xg","sot","shots","bigch","corners","offsides","fouls"]){
+    if(ls[k]==null && rs[k]==null) continue;
+    rows+=`<div class="st-row"><span class="st-l">${num(ls[k],k==="xg")}</span><span class="st-m">${T.stLbl[k]}</span><span class="st-r">${num(rs[k],k==="xg")}</span></div>`;
+  }
+  const card=s=>{ const y=+s.yellow||0, r=+s.red||0; let out=""; if(y)out+=`🟨${y} `; if(r)out+=`🟥${r}`; return out.trim()||"–"; };
+  if(ls.yellow||ls.red||rs.yellow||rs.red)
+    rows+=`<div class="st-row"><span class="st-l">${card(ls)}</span><span class="st-m">${T.stLbl.cards}</span><span class="st-r">${card(rs)}</span></div>`;
+  if(!rows){ box.innerHTML=""; return; }
+  box.innerHTML=`<div class="stats-h">${T.statsTitle}${data.final?"":` <span class="stats-live">${T.statLiveTag}</span>`}</div>${rows}`;
 }
 
 // ---- календарна подія для матчу (спільні дані для Google / Outlook / .ics) ----

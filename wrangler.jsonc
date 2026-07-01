@@ -5,5 +5,11 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    { "binding": "WC_STATS", "id": "38b94f41406b42ff8272c4b71b008dbf" }
+  ],
+  "triggers": {
+    "crons": ["*/3 * * * *"]
   }
 }
