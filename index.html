@@ -250,9 +250,9 @@
 const SRC = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 
 // ================= i18n: мова (авто з браузера + перемикач) і локальний час =================
-const SUPPORTED = ["uk","en","ru"];
-const LOCALE   = { uk:"uk-UA", en:"en-GB", ru:"ru-RU" };
-const LANGNAME = { uk:"UA", en:"EN", ru:"RU" };
+const SUPPORTED = ["uk","en"];
+const LOCALE   = { uk:"uk-UA", en:"en-GB" };
+const LANGNAME = { uk:"UA", en:"EN" };
 function detectLang(){
   try{ const s=localStorage.getItem("wc_lang"); if(s&&SUPPORTED.includes(s)) return s; }catch(e){}
   const navs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language||"en"];
@@ -319,31 +319,6 @@ const I18N = {
     descWatch:(d,tm,z)=>`Kick-off: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Result: ${a}:${b}.`,
     descBracket:"Playoff bracket: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · WC 2026${r?` (${r})`:""}`,
     loadErr:m=>`<div class="err">Couldn't load data (${m}).<br>If you opened the file directly — start a local server:<br><code>python3 -m http.server</code> and open <code>http://localhost:8000</code>.</div>`
-  },
-  ru:{
-    title:"🏆 ЧМ-2026 · Сетка плей-офф", h1:"Чемпионат мира 2026",
-    sub:"Сетка плей-офф · обновляется автоматически",
-    tabBracket:"🏆 Сетка", tabSchedule:"📅 Когда смотреть", tabGroups:"📊 Группы",
-    loading:"загрузка…", updated:x=>"обновлено "+x, updateError:"ошибка обновления",
-    legWinnerGold:"Победитель — <b>золотом</b>", legPub:"🍺 вечер (17:00–23:59) — удобно в паб",
-    legDim:'<span style="color:#9aa6cc">приглушённым</span> — прогноз', legClick:"клик — голы",
-    legTime:z=>`Время — <b>ваш пояс${z?` (${z})`:""}</b>`, legNight:"🌙 ночь", legToday:"🔴 сегодня", legPlayed:"✅ сыграно",
-    legGroups:"Группы 2026", legGreen:'<span style="color:var(--green)">зелёные</span> — топ-2 (выход)',
-    legYellow:'<span style="color:var(--gold)">жёлтые</span> — 3-е место (часть выходит)',
-    footer:"Данные: openfootball (public domain) · обновление раз в минуту · сделано для Football | WAWA ⚽",
-    final:"Финал", thirdCard:"За 3-е место", roundThird:"3-е м.", grPrefix:"Гр. ", groupWord:"Группа ",
-    extraTime:"доп. время", awaiting:"ждём счёт", pens:(a,b)=>`пен. ${a}–${b}`, live:"LIVE", liveNow:"идёт",
-    winnerOf:"Победитель ", loserOf:"Проигравший ",
-    placeOrd:["","1-е","2-е","3-е"], placeInGroup:(o,g)=>`${o} место гр. ${g}`, thirdPool:l=>`3-е место (${l})`,
-    groupsNA:"Данные по группам пока недоступны.", ongoing:"· идёт",
-    colTeam:"Команда", colP:"И", colW:"В", colD:"Н", colL:"П", colPts:"О",
-    schedNA:"Расписание пока недоступно.", today:"· сегодня 🔴", upcoming:"· ближайшие ⏭", penaltiesFull:(a,b)=>`пенальти ${a}–${b}`,
-    addCal:"🗓 Добавить в календарь", calHintAll:"Все три сразу открывают событие в календаре. ",
-    dlIcs:"Скачать .ics", timeTbd:"Время матча уточняется",
-    descMatch:(a,b)=>`Матч ЧМ-2026 (USA / Canada / Mexico): ${a} против ${b}.`, descRound:r=>`Раунд: ${r}.`,
-    descWatch:(d,tm,z)=>`Время показа: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Результат: ${a}:${b}.`,
-    descBracket:"Сетка плей-офф: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · ЧМ-2026${r?` (${r})`:""}`,
-    loadErr:m=>`<div class="err">Не удалось загрузить данные (${m}).<br>Если открыли файл двойным кликом — запустите локальный сервер:<br><code>python3 -m http.server</code> и откройте <code>http://localhost:8000</code>.</div>`
   }
 };
 function t(){ return I18N[lang] || I18N.en; }
