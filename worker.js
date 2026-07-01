@@ -8,7 +8,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/event.ics") return eventIcs(url);
     if (url.pathname === "/stats")     return statsRoute(url, env);
-    if (url.pathname === "/scores")    return scoresRoute(env);
+    if (url.pathname === "/scores")    return scoresRoute(env, url);
     return env.ASSETS.fetch(request);
   },
   async scheduled(event, env, ctx) {
@@ -105,7 +105,16 @@ async function getMatchList(env) {
 }
 
 // ---- бекап рахунків: увесь список зі свіжими рахунками/статусами (1 запит на всі матчі) ----
-async function scoresRoute(env) {
+async function scoresRoute(env, url) {
+  if (url && url.searchParams.get("debug") === "1") {
+    const c = await env.WC_STATS.get("hl:matches", "json");
+    let fresh = "skip";
+    if ((await budgetLeft(env)) > 2) {
+      const r = await hlFetch(env, `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=100`);
+      fresh = r && Array.isArray(r.data) ? r.data.length : "fail:" + JSON.stringify(r).slice(0, 80);
+    }
+    return json({ budgetLeft: await budgetLeft(env), cacheV: c ? c.v : null, cacheLen: c ? c.matches.length : null, freshFetch: fresh });
+  }
   const matches = await getMatchList(env);
   const out = matches
     .filter(m => m.score || m.status)
