@@ -689,6 +689,7 @@ async function mergeBackupScores(){
 async function loadStats(m){
   const box=document.getElementById("m-stats"); if(!box) return;
   box.innerHTML="";
+  if(m.group) return;                                       // статистика лише для плей-офф
   const d1=displayTeam(m.team1), d2=displayTeam(m.team2);
   if(!m.team1||!m.team2||d1.prov||d2.prov) return;         // команди ще не відомі
   const dt=cetDate(m.date,m.time);

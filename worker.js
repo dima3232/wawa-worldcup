@@ -49,6 +49,8 @@ function json(obj, status = 200, cacheSec = 0) {
   });
 }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// статистику тягнемо лише для плей-офф (нокаут), груповий етап пропускаємо
+const isKO = r => !!r && !/group/i.test(r);
 // набір слів назви (регістр/порядок неважливі): "DR Congo" == "Congo DR"
 const tokset = s => ((s || "").toLowerCase().match(/[a-z]+/g) || []).sort().join(" ");
 const pairKey = (a, b) => [tokset(a), tokset(b)].sort().join("|");
@@ -93,7 +95,7 @@ async function getMatchList(env) {
   const matches = r.data.map(m => {
     const st = m.state || {}, sc = st.score || {};
     return {
-      id: m.id,
+      id: m.id, round: m.round || "",
       home: (m.homeTeam || {}).name, away: (m.awayTeam || {}).name,
       date: (m.date || "").slice(0, 10), ts: Date.parse(m.date) || 0,
       score: parseScorePair(sc.current), pens: parseScorePair(sc.penalties),
@@ -144,6 +146,7 @@ async function pollLive(env) {
   let backfilled = 0;                                   // не більше N добору завершених за прогін
   for (const m of matches) {
     if ((await budgetLeft(env)) <= 4) break;            // лишаємо запас на список і лайв
+    if (!isKO(m.round)) continue;                      // тільки плей-офф
     if (!m.ts || now < m.ts) continue;                 // ще не почався
     const rec = await env.WC_STATS.get("stats:" + m.id, "json");
     if (now < m.ts + FINAL_MS) {                        // йде (враховуючи ЕТ/пенальті)
@@ -165,6 +168,7 @@ async function statsRoute(url, env) {
   let m = matches.find(x => pairKey(x.home, x.away) === want && (!date || x.date === date))
        || matches.find(x => pairKey(x.home, x.away) === want);
   if (!m) return json({ status: "no-match" }, 200, 300);
+  if (!isKO(m.round)) return json({ status: "group" }, 200, 3600);   // груповий етап — без стат
   let rec = await env.WC_STATS.get("stats:" + m.id, "json");
   const now = Date.now(), started = m.ts && now >= m.ts;
   // лінивий добір: не було зовсім / застаріле лайв / завершено-але-не-фінал
