@@ -27,6 +27,9 @@
   .tabs{display:flex;gap:6px;background:#0e1530;border:1px solid #20294a;border-radius:999px;padding:4px}
   .tabs button{all:unset;cursor:pointer;padding:7px 16px;border-radius:999px;font-size:13px;color:var(--dim);font-weight:600}
   .tabs button.active{background:var(--card2);color:var(--txt);box-shadow:0 1px 0 #2a3a66}
+  .lang{display:flex;gap:2px;background:#0e1530;border:1px solid #20294a;border-radius:999px;padding:3px}
+  .lang button{all:unset;cursor:pointer;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;color:var(--dim);letter-spacing:.3px}
+  .lang button.on{background:var(--card2);color:var(--txt);box-shadow:0 1px 0 #2a3a66}
   .status{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:7px}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(63,208,125,.6);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(63,208,125,.5)}70%{box-shadow:0 0 0 7px rgba(63,208,125,0)}100%{box-shadow:0 0 0 0 rgba(63,208,125,0)}}
@@ -212,7 +215,7 @@
 <header>
   <span style="font-size:22px">🏆</span>
   <div>
-    <h1>Чемпіонат світу 2026 · USA / Canada / Mexico</h1>
+    <h1 id="h1">Чемпіонат світу 2026 · USA / Canada / Mexico</h1>
     <div class="sub">Сітка плей-оф · оновлюється автоматично</div>
   </div>
   <div class="spacer"></div>
@@ -221,21 +224,22 @@
     <button id="tab-sc" onclick="show('sc')">📅 Коли дивитись</button>
     <button id="tab-gr" onclick="show('gr')">📊 Групи</button>
   </div>
+  <div class="lang" id="lang"></div>
   <div class="status"><span class="dot"></span><span id="upd">завантаження…</span></div>
 </header>
 
 <div class="wrap">
   <div id="view-br" class="view active">
-    <div class="legend"><span>Переможець — <b>золотом</b></span><span class="sep">·</span><span style="color:var(--green)">🍺 17:00–23:59 CET — можна в паб</span><span class="sep">·</span><span><span style="color:#9aa6cc">приглушеним</span> — прогноз</span><span class="sep">·</span><span>клік — голи</span></div>
+    <div class="legend" id="leg-br"></div>
     <div id="round-tabs" class="round-tabs"></div>
     <div id="bracket" class="bracket"></div>
   </div>
   <div id="view-sc" class="view">
-    <div class="legend"><span>Час — <b>центральноєвропейський (CET/CEST)</b></span><span class="sep">·</span><span style="color:var(--green)">🍺 17:00–23:59 — можна в паб</span><span class="sep">·</span><span>🌙 ніч</span><span class="sep">·</span><span>🔴 сьогодні</span><span class="sep">·</span><span>✅ зіграно</span></div>
+    <div class="legend" id="leg-sc"></div>
     <div id="sched" class="sched"></div>
   </div>
   <div id="view-gr" class="view">
-    <div class="legend"><span>Групи 2026</span><span class="sep">·</span><span><span style="color:var(--green)">зелені</span> — топ-2 (вихід)</span><span class="sep">·</span><span><span style="color:var(--gold)">жовті</span> — 3-тє місце (частина виходить)</span></div>
+    <div class="legend" id="leg-gr"></div>
     <div id="groups" class="groups"></div>
   </div>
 </div>
@@ -244,6 +248,105 @@
 
 <script>
 const SRC = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
+
+// ================= i18n: мова (авто з браузера + перемикач) і локальний час =================
+const SUPPORTED = ["uk","en","ru"];
+const LOCALE   = { uk:"uk-UA", en:"en-GB", ru:"ru-RU" };
+const LANGNAME = { uk:"UA", en:"EN", ru:"RU" };
+function detectLang(){
+  try{ const s=localStorage.getItem("wc_lang"); if(s&&SUPPORTED.includes(s)) return s; }catch(e){}
+  const navs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language||"en"];
+  for(const l of navs){ const two=(l||"").slice(0,2).toLowerCase(); if(SUPPORTED.includes(two)) return two; }
+  return "en";
+}
+let lang = detectLang();
+// час користувача: його власний пояс (з фолбеком на Берлін)
+let TZ = (()=>{ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Berlin"; }catch(e){ return "Europe/Berlin"; } })();
+function locale(){ return LOCALE[lang] || "en-GB"; }
+function tzLabel(dt){
+  try{
+    const p=new Intl.DateTimeFormat(locale(),{timeZone:TZ,timeZoneName:"short"}).formatToParts(dt||new Date());
+    const z=p.find(x=>x.type==="timeZoneName"); return z? z.value : "";
+  }catch(e){ return ""; }
+}
+const I18N = {
+  uk:{
+    title:"🏆 ЧС-2026 · Сітка плей-оф", h1:"Чемпіонат світу 2026",
+    sub:"Сітка плей-оф · оновлюється автоматично",
+    tabBracket:"🏆 Сітка", tabSchedule:"📅 Коли дивитись", tabGroups:"📊 Групи",
+    loading:"завантаження…", updated:x=>"оновлено "+x, updateError:"помилка оновлення",
+    legWinnerGold:"Переможець — <b>золотом</b>", legPub:"🍺 вечір (17:00–23:59) — зручно в паб",
+    legDim:'<span style="color:#9aa6cc">приглушеним</span> — прогноз', legClick:"клік — голи",
+    legTime:z=>`Час — <b>ваш пояс${z?` (${z})`:""}</b>`, legNight:"🌙 ніч", legToday:"🔴 сьогодні", legPlayed:"✅ зіграно",
+    legGroups:"Групи 2026", legGreen:'<span style="color:var(--green)">зелені</span> — топ-2 (вихід)',
+    legYellow:'<span style="color:var(--gold)">жовті</span> — 3-тє місце (частина виходить)',
+    footer:"Дані: openfootball (public domain) · оновлення щохвилини · зроблено для Football | WAWA ⚽",
+    final:"Фінал", thirdCard:"За 3-тє місце", roundThird:"3-тє м.", grPrefix:"Гр. ", groupWord:"Група ",
+    extraTime:"дод. час", awaiting:"чекаємо рахунок", pens:(a,b)=>`пен. ${a}–${b}`, live:"LIVE", liveNow:"триває",
+    winnerOf:"Переможець ", loserOf:"Переможений ",
+    placeOrd:["","1-ше","2-ге","3-тє"], placeInGroup:(o,g)=>`${o} місце гр. ${g}`, thirdPool:l=>`3-тє місце (${l})`,
+    groupsNA:"Дані по групах поки недоступні.", ongoing:"· триває",
+    colTeam:"Команда", colP:"І", colW:"В", colD:"Н", colL:"П", colPts:"О",
+    schedNA:"Розклад поки недоступний.", today:"· сьогодні 🔴", upcoming:"· найближчі ⏭", penaltiesFull:(a,b)=>`пенальті ${a}–${b}`,
+    addCal:"🗓 Додати в календар", calHintAll:"Усі три одразу відкривають подію в календарі. ",
+    dlIcs:"Завантажити .ics", timeTbd:"Час матчу ще уточнюється",
+    descMatch:(a,b)=>`Матч ЧС-2026 (USA / Canada / Mexico): ${a} проти ${b}.`, descRound:r=>`Раунд: ${r}.`,
+    descWatch:(d,tm,z)=>`Час показу: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Результат: ${a}:${b}.`,
+    descBracket:"Сітка плей-оф: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · ЧС-2026${r?` (${r})`:""}`,
+    loadErr:m=>`<div class="err">Не вдалося завантажити дані (${m}).<br>Якщо відкрили файл подвійним кліком — запустіть локальний сервер:<br><code>python3 -m http.server</code> і відкрийте <code>http://localhost:8000</code>.</div>`
+  },
+  en:{
+    title:"🏆 WC 2026 · Playoff bracket", h1:"World Cup 2026",
+    sub:"Playoff bracket · updates automatically",
+    tabBracket:"🏆 Bracket", tabSchedule:"📅 When to watch", tabGroups:"📊 Groups",
+    loading:"loading…", updated:x=>"updated "+x, updateError:"update failed",
+    legWinnerGold:"Winner — <b>gold</b>", legPub:"🍺 evening (17:00–23:59) — pub-friendly",
+    legDim:'<span style="color:#9aa6cc">dimmed</span> — projected', legClick:"tap — goals",
+    legTime:z=>`Time — <b>your local zone${z?` (${z})`:""}</b>`, legNight:"🌙 night", legToday:"🔴 today", legPlayed:"✅ played",
+    legGroups:"Groups 2026", legGreen:'<span style="color:var(--green)">green</span> — top 2 (advance)',
+    legYellow:'<span style="color:var(--gold)">yellow</span> — 3rd place (some advance)',
+    footer:"Data: openfootball (public domain) · refreshes every minute · made for Football | WAWA ⚽",
+    final:"Final", thirdCard:"Third place", roundThird:"3rd pl.", grPrefix:"Gr. ", groupWord:"Group ",
+    extraTime:"extra time", awaiting:"awaiting score", pens:(a,b)=>`pens ${a}–${b}`, live:"LIVE", liveNow:"live now",
+    winnerOf:"Winner ", loserOf:"Loser ",
+    placeOrd:["","1st","2nd","3rd"], placeInGroup:(o,g)=>`${o} in group ${g}`, thirdPool:l=>`3rd place (${l})`,
+    groupsNA:"Group data not available yet.", ongoing:"· ongoing",
+    colTeam:"Team", colP:"P", colW:"W", colD:"D", colL:"L", colPts:"Pts",
+    schedNA:"Schedule not available yet.", today:"· today 🔴", upcoming:"· up next ⏭", penaltiesFull:(a,b)=>`penalties ${a}–${b}`,
+    addCal:"🗓 Add to calendar", calHintAll:"All three open the event in your calendar. ",
+    dlIcs:"Download .ics", timeTbd:"Kick-off time TBD",
+    descMatch:(a,b)=>`World Cup 2026 match (USA / Canada / Mexico): ${a} vs ${b}.`, descRound:r=>`Round: ${r}.`,
+    descWatch:(d,tm,z)=>`Kick-off: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Result: ${a}:${b}.`,
+    descBracket:"Playoff bracket: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · WC 2026${r?` (${r})`:""}`,
+    loadErr:m=>`<div class="err">Couldn't load data (${m}).<br>If you opened the file directly — start a local server:<br><code>python3 -m http.server</code> and open <code>http://localhost:8000</code>.</div>`
+  },
+  ru:{
+    title:"🏆 ЧМ-2026 · Сетка плей-офф", h1:"Чемпионат мира 2026",
+    sub:"Сетка плей-офф · обновляется автоматически",
+    tabBracket:"🏆 Сетка", tabSchedule:"📅 Когда смотреть", tabGroups:"📊 Группы",
+    loading:"загрузка…", updated:x=>"обновлено "+x, updateError:"ошибка обновления",
+    legWinnerGold:"Победитель — <b>золотом</b>", legPub:"🍺 вечер (17:00–23:59) — удобно в паб",
+    legDim:'<span style="color:#9aa6cc">приглушённым</span> — прогноз', legClick:"клик — голы",
+    legTime:z=>`Время — <b>ваш пояс${z?` (${z})`:""}</b>`, legNight:"🌙 ночь", legToday:"🔴 сегодня", legPlayed:"✅ сыграно",
+    legGroups:"Группы 2026", legGreen:'<span style="color:var(--green)">зелёные</span> — топ-2 (выход)',
+    legYellow:'<span style="color:var(--gold)">жёлтые</span> — 3-е место (часть выходит)',
+    footer:"Данные: openfootball (public domain) · обновление раз в минуту · сделано для Football | WAWA ⚽",
+    final:"Финал", thirdCard:"За 3-е место", roundThird:"3-е м.", grPrefix:"Гр. ", groupWord:"Группа ",
+    extraTime:"доп. время", awaiting:"ждём счёт", pens:(a,b)=>`пен. ${a}–${b}`, live:"LIVE", liveNow:"идёт",
+    winnerOf:"Победитель ", loserOf:"Проигравший ",
+    placeOrd:["","1-е","2-е","3-е"], placeInGroup:(o,g)=>`${o} место гр. ${g}`, thirdPool:l=>`3-е место (${l})`,
+    groupsNA:"Данные по группам пока недоступны.", ongoing:"· идёт",
+    colTeam:"Команда", colP:"И", colW:"В", colD:"Н", colL:"П", colPts:"О",
+    schedNA:"Расписание пока недоступно.", today:"· сегодня 🔴", upcoming:"· ближайшие ⏭", penaltiesFull:(a,b)=>`пенальти ${a}–${b}`,
+    addCal:"🗓 Добавить в календарь", calHintAll:"Все три сразу открывают событие в календаре. ",
+    dlIcs:"Скачать .ics", timeTbd:"Время матча уточняется",
+    descMatch:(a,b)=>`Матч ЧМ-2026 (USA / Canada / Mexico): ${a} против ${b}.`, descRound:r=>`Раунд: ${r}.`,
+    descWatch:(d,tm,z)=>`Время показа: ${d}, ${tm}${z?` (${z})`:""}.`, descResult:(a,b)=>`Результат: ${a}:${b}.`,
+    descBracket:"Сетка плей-офф: https://wawa-worldcup.challango.com", evTitle:(a,b,r)=>`${a} – ${b} · ЧМ-2026${r?` (${r})`:""}`,
+    loadErr:m=>`<div class="err">Не удалось загрузить данные (${m}).<br>Если открыли файл двойным кликом — запустите локальный сервер:<br><code>python3 -m http.server</code> и откройте <code>http://localhost:8000</code>.</div>`
+  }
+};
+function t(){ return I18N[lang] || I18N.en; }
 
 // ---- bracket feed map (official 2026 match numbers) ----
 const FEED = {
@@ -348,10 +451,10 @@ function metaHtml(m){
   let l = dt ? `${cetDateShort(dt)} · ${cetWeekday(dt)}` : (m.date?fmtDate(m.date):"");
   if(pub) l = "🍺 "+l;
   let r = "";
-  if(sp&&sp.p) r = `пен. ${sp.p[0]}–${sp.p[1]}`;
-  else if(sp&&sp.et) r = "дод. час";
-  else if(pending) r = "чекаємо рахунок";
-  else if(!sp&&dt) r = cetTime(dt)+" CET";
+  if(sp&&sp.p) r = t().pens(sp.p[0],sp.p[1]);
+  else if(sp&&sp.et) r = t().extraTime;
+  else if(pending) r = t().awaiting;
+  else if(!sp&&dt) r = cetTime(dt)+" "+tzLabel(dt);
   else if(!sp&&m.time) r = m.time.replace(/ UTC.*/,'');
   return `<div class="meta${pub?' pub':''}"><span>${live?'<span class="badge-live">LIVE</span> ':''}${l}</span><span>${r}</span></div>`;
 }
@@ -385,11 +488,11 @@ function finalColumn(){
   const cup = document.createElement("div"); cup.className="cup-wrap";
   cup.innerHTML = `<div class="cup">${CUP_SVG}</div><div class="champ">${champ? flag(champ)+" "+champ : ""}</div>`;
   const fc = document.createElement("div"); fc.className="final-card"; fc.id="m"+FINAL;
-  fc.innerHTML = `<div class="ttl">Фінал</div>${finalRows(fm)}${metaHtml(fm)}`;
+  fc.innerHTML = `<div class="ttl">${t().final}</div>${finalRows(fm)}${metaHtml(fm)}`;
   fc.onclick = ()=>showGoals(fm, FINAL);
   const tm = byNum[THIRD];
   const tc = document.createElement("div"); tc.className="final-card third-card"; tc.id="m"+THIRD;
-  tc.innerHTML = `<div class="ttl">За 3-тє місце</div>${finalRows(tm)}${metaHtml(tm)}`;
+  tc.innerHTML = `<div class="ttl">${t().thirdCard}</div>${finalRows(tm)}${metaHtml(tm)}`;
   if(tm) tc.onclick = ()=>showGoals(tm, THIRD);
   wrap.append(cup, fc, tc);
   return wrap;
@@ -416,7 +519,7 @@ function buildRoundTabs(){
   const bar = document.getElementById("round-tabs"); if(!bar) return;
   bar.innerHTML = "";
   ROUNDS.forEach(rd=>{
-    const b = document.createElement("button"); b.dataset.round=rd.key; b.textContent=rd.label;
+    const b = document.createElement("button"); b.dataset.round=rd.key; b.textContent=(rd.key==="final"?t().final:rd.label);
     b.onclick = ()=>gotoRound(rd.key);
     bar.appendChild(b);
   });
@@ -518,7 +621,7 @@ function showGoals(m, num){
   const d1=displayTeam(m.team1), d2=displayTeam(m.team2);
   const t1=d1.nm, t2=d2.nm;
   const sp=scorePair(m), dt=cetDate(m.date,m.time);
-  const head = sp? `${(sp.ft||sp.et)[0]} : ${(sp.ft||sp.et)[1]}` : (dt? cetTime(dt)+" CET":"—");
+  const head = sp? `${(sp.ft||sp.et)[0]} : ${(sp.ft||sp.et)[1]}` : (dt? cetTime(dt)+" "+tzLabel(dt):"—");
   if(!modalEl){
     modalEl=document.createElement("div"); modalEl.className="modal"; modalEl.id="match-modal";
     modalEl.innerHTML='<div class="modal-card" role="dialog" aria-modal="true"></div>';
@@ -540,7 +643,7 @@ function showGoals(m, num){
     </div>
     <div class="m-meta">
       ${rl?`<span class="chip">${rl}</span>`:""}
-      ${dt?`<span>🗓 ${cetDayLabel(dt)}, ${cetTime(dt)} (ЦЄЧ)</span>`:""}
+      ${dt?`<span>🗓 ${cetDayLabel(dt)}, ${cetTime(dt)} (${tzLabel(dt)})</span>`:""}
       ${m.ground?`<span>📍 ${m.ground}</span>`:""}
     </div>
     <div class="m-goals">
@@ -549,14 +652,14 @@ function showGoals(m, num){
     </div>
     <div class="m-actions">
       ${dt ? `
-        <div class="cal-title">🗓 Додати в календар</div>
+        <div class="cal-title">${t().addCal}</div>
         <div class="cal-row">
           <a class="cal-opt" href="${googleCalUrl(m)}" target="_blank" rel="noopener">📅 Google</a>
           <a class="cal-opt" href="${outlookCalUrl(m)}" target="_blank" rel="noopener">📧 Outlook</a>
           <a class="cal-opt" href="${appleWebcalUrl(m)}">🍎 Apple</a>
         </div>
-        <div class="cal-hint">Усі три одразу відкривають подію в календарі. <a href="#" class="ics-fallback">Завантажити .ics</a></div>`
-        : `<span class="cal-note">Час матчу ще уточнюється</span>`}
+        <div class="cal-hint">${t().calHintAll}<a href="#" class="ics-fallback">${t().dlIcs}</a></div>`
+        : `<span class="cal-note">${t().timeTbd}</span>`}
     </div>`;
   card.querySelector(".modal-x").onclick=closeModal;
   const fb=card.querySelector(".ics-fallback"); if(fb) fb.onclick=e=>{ e.preventDefault(); addToCalendar(m, num); };
@@ -573,13 +676,13 @@ function calEvent(m){                                    // -> {start,end,title,
   const t1=displayTeam(m.team1).nm, t2=displayTeam(m.team2).nm, rl=roundLabel(m), sp=scorePair(m);
   return {
     start:dt, end:new Date(dt.getTime()+120*60000),     // матч ≈ 2 год
-    title:`${t1} – ${t2} · ЧС-2026${rl?` (${rl})`:""}`,
+    title:t().evTitle(t1,t2,rl),
     desc:[
-      `Матч ЧС-2026 (USA / Canada / Mexico): ${t1} проти ${t2}.`,
-      rl?`Раунд: ${rl}.`:"",
-      `Час показу: ${cetDayLabel(dt)}, ${cetTime(dt)} (ЦЄЧ / CET).`,
-      sp?`Результат: ${(sp.ft||sp.et)[0]}:${(sp.ft||sp.et)[1]}.`:"",
-      `Сітка плей-оф: https://wawa-worldcup.challango.com`
+      t().descMatch(t1,t2),
+      rl?t().descRound(rl):"",
+      t().descWatch(cetDayLabel(dt), cetTime(dt), tzLabel(dt)),
+      sp?t().descResult((sp.ft||sp.et)[0],(sp.ft||sp.et)[1]):"",
+      t().descBracket
     ].filter(Boolean).join("\n"),
     loc:m.ground||""
   };
@@ -663,17 +766,17 @@ function displayTeam(raw){
     const isW=mt[1]==="W", ref=byNum[+mt[2]], num=+mt[2];
     if(ref){ const w=winnerOf(ref); if(w){ const nm=((isW?w===1:w===2))?ref.team1:ref.team2; return displayTeam(nm); } }
     const rnd = num>=103?"1/2" : num>=101?"1/2" : num>=97?"1/4" : num>=89?"1/8" : "1/16";
-    return {nm:(isW?"Переможець ":"Переможений ")+rnd, fl:isW?"➡️":"↩️", prov:true};
+    return {nm:(isW?t().winnerOf:t().loserOf)+rnd, fl:isW?"➡️":"↩️", prov:true};
   }
   // single group position 1A / 2K / 3C
   if(mt=raw.match(/^([123])([A-L])$/)){
     const pos=+mt[1], gname="Group "+mt[2], st=standings[gname];
     if(st && st.rows[pos-1]) return {...displayTeam(st.rows[pos-1].t), prov:!st.done};
-    return {nm:(pos===1?"1-ше":pos===2?"2-ге":"3-тє")+" місце гр. "+mt[2], fl:["","🥇","🥈","🥉"][pos], prov:true};
+    return {nm:t().placeInGroup(t().placeOrd[pos], mt[2]), fl:["","🥇","🥈","🥉"][pos], prov:true};
   }
   // third-place pool 3A/B/C/D/F
   if(/^3[A-L](\/[A-L])+$/.test(raw))
-    return {nm:"3-тє місце ("+raw.slice(1)+")", fl:"🥉", prov:true};
+    return {nm:t().thirdPool(raw.slice(1)), fl:"🥉", prov:true};
   // real team name
   return {nm:raw, fl:flag(raw), prov:false};
 }
@@ -682,13 +785,14 @@ function displayTeam(raw){
 function buildGroups(){
   const wrap=document.getElementById("groups"); wrap.innerHTML="";
   const names=Object.keys(standings).sort();
-  if(!names.length){ wrap.innerHTML="<div class='err'>Дані по групах поки недоступні.</div>"; return; }
+  if(!names.length){ wrap.innerHTML=`<div class='err'>${t().groupsNA}</div>`; return; }
   names.forEach(gname=>{
     const rows=standings[gname].rows;
+    const gdisp=gname.replace("Group ", t().groupWord);
     const card=document.createElement("div"); card.className="gcard";
-    card.innerHTML=`<h3>${gname}${standings[gname].done?"":' <span style="color:#5a648a;font-weight:400;font-size:11px">· триває</span>'}</h3>
-      <table><thead><tr><th></th><th class="team" style="text-align:left">Команда</th>
-        <th>І</th><th>В</th><th>Н</th><th>П</th><th>±</th><th>О</th></tr></thead><tbody>
+    card.innerHTML=`<h3>${gdisp}${standings[gname].done?"":` <span style="color:#5a648a;font-weight:400;font-size:11px">${t().ongoing}</span>`}</h3>
+      <table><thead><tr><th></th><th class="team" style="text-align:left">${t().colTeam}</th>
+        <th>${t().colP}</th><th>${t().colW}</th><th>${t().colD}</th><th>${t().colL}</th><th>±</th><th>${t().colPts}</th></tr></thead><tbody>
       ${rows.map((r,i)=>`<tr class="q${i+1}">
         <td class="pos">${i+1}</td>
         <td class="team">${flag(r.t)} ${r.t}</td>
@@ -706,7 +810,7 @@ function buildSchedule(){
     .map(m=>({m, dt:cetDate(m.date,m.time)}))
     .filter(x=>x.dt)
     .sort((a,b)=>a.dt-b.dt);
-  if(!items.length){ wrap.innerHTML="<div class='err'>Розклад поки недоступний.</div>"; return; }
+  if(!items.length){ wrap.innerHTML=`<div class='err'>${t().schedNA}</div>`; return; }
 
   // день для авто-фокусу: перший матч, який ще попереду або триває (старт за останні 3 год).
   // якщо сьогодні вже відіграно — це буде найближчий майбутній день.
@@ -721,7 +825,7 @@ function buildSchedule(){
       curDay=dk;
       const h=document.createElement("div"); h.className="day-h";
       if(dk===focusDayKey){ h.id="focus-day"; h.classList.add("focus"); }
-      h.textContent=cetDayLabel(dt)+(cetIsToday(dt)?"  · сьогодні 🔴":(dk===focusDayKey?"  · найближчі ⏭":""));
+      h.textContent=cetDayLabel(dt)+(cetIsToday(dt)?"  "+t().today:(dk===focusDayKey?"  "+t().upcoming:""));
       wrap.appendChild(h);
     }
     const sp=scorePair(m), played=!!sp, w=winnerOf(m);
@@ -737,15 +841,15 @@ function buildSchedule(){
     const row=document.createElement("div");
     row.className="srow"+(pub?" pub":"")+(live?" live":"")+(today&&!played&&!live?" today":"")+(played?" done":"");
     row.onclick=()=>showGoals(m, m.num);
-    const timeMain = played?"✅" : live?"LIVE" : cetTime(dt);
-    const timeSub  = played?fmtDate(m.date) : live?"триває" : pending?"чекаємо рахунок" : (pub?"🍺 ":"")+"CET"+(late?" 🌙":"");
+    const timeMain = played?"✅" : live?t().live : cetTime(dt);
+    const timeSub  = played?fmtDate(m.date) : live?t().liveNow : pending?t().awaiting : (pub?"🍺 ":"")+tzLabel(dt)+(late?" 🌙":"");
     row.innerHTML=`
       <div class="time">${timeMain}<small>${timeSub}</small></div>
       <div class="rnd">${roundLabel(m)}</div>
       <div class="pair">
         ${tmRow(m.team1, b[0], 1)}
         ${tmRow(m.team2, b[1], 2)}
-        ${sp&&sp.p?`<div class="late">пенальті ${sp.p[0]}–${sp.p[1]}</div>`:""}
+        ${sp&&sp.p?`<div class="late">${t().penaltiesFull(sp.p[0],sp.p[1])}</div>`:""}
       </div>
       <div class="grd">${m.ground||""}</div>`;
     wrap.appendChild(row);
@@ -755,8 +859,8 @@ function buildSchedule(){
 // ---- helpers ----
 function fmtDate(d){ if(!d) return ""; const [y,mo,da]=d.split("-"); return `${da}.${mo}`; }
 
-// ---- Central European Time (Europe/Berlin, авто CET/CEST) ----
-const TZ = "Europe/Berlin";
+// ---- час у поясі та мові користувача (TZ і locale() визначені в блоці i18n вгорі) ----
+// назви лишились cet* історично, але тепер це локальний час користувача
 function cetDate(date, time){           // -> JS Date (моментальний UTC), або null
   if(!date || !time) return null;
   const mt = time.match(/(\d{1,2}):(\d{2})\s*UTC([+-]\d{1,2})/);
@@ -764,11 +868,11 @@ function cetDate(date, time){           // -> JS Date (моментальний 
   const hh=+mt[1], mm=+mt[2], off=+mt[3];
   return new Date(Date.UTC(+date.slice(0,4), +date.slice(5,7)-1, +date.slice(8,10), hh-off, mm));
 }
-function cetTime(dt){ return dt? dt.toLocaleTimeString("uk-UA",{timeZone:TZ,hour:"2-digit",minute:"2-digit"}) : ""; }
-function cetDayKey(dt){ return dt? dt.toLocaleDateString("sv-SE",{timeZone:TZ}) : ""; }  // YYYY-MM-DD
-function cetDayLabel(dt){ return dt? dt.toLocaleDateString("uk-UA",{timeZone:TZ,weekday:"long",day:"2-digit",month:"long"}) : ""; }
-function cetDateShort(dt){ return dt? dt.toLocaleDateString("uk-UA",{timeZone:TZ,day:"2-digit",month:"2-digit"}) : ""; }   // 29.06
-function cetWeekday(dt){ if(!dt) return ""; const s=dt.toLocaleDateString("uk-UA",{timeZone:TZ,weekday:"long"}); return s.charAt(0).toUpperCase()+s.slice(1); }  // Неділя
+function cetTime(dt){ return dt? dt.toLocaleTimeString(locale(),{timeZone:TZ,hour:"2-digit",minute:"2-digit"}) : ""; }
+function cetDayKey(dt){ return dt? dt.toLocaleDateString("sv-SE",{timeZone:TZ}) : ""; }  // YYYY-MM-DD (стабільний ключ дня)
+function cetDayLabel(dt){ return dt? dt.toLocaleDateString(locale(),{timeZone:TZ,weekday:"long",day:"2-digit",month:"long"}) : ""; }
+function cetDateShort(dt){ return dt? dt.toLocaleDateString(locale(),{timeZone:TZ,day:"2-digit",month:"2-digit"}) : ""; }
+function cetWeekday(dt){ if(!dt) return ""; const s=dt.toLocaleDateString(locale(),{timeZone:TZ,weekday:"long"}); return s.charAt(0).toUpperCase()+s.slice(1); }
 function cetIsToday(dt){ return dt && cetDayKey(dt)===cetDayKey(new Date()); }
 function cetHour(dt){ return dt? +dt.toLocaleTimeString("en-GB",{timeZone:TZ,hour:"2-digit",hour12:false}).slice(0,2) : -1; }
 function cetIsLate(dt){ const h=cetHour(dt); return h>=0 && h<6; }            // глибока ніч 🌙
@@ -786,11 +890,13 @@ function liveInfo(m){
 
 const ROUND = {
  "Round of 32":"1/16","Round of 16":"1/8","Quarter-final":"1/4","Quarterfinal":"1/4",
- "Semi-final":"1/2","Semifinal":"1/2","Match for third place":"3-тє м.","Final":"Фінал"
+ "Semi-final":"1/2","Semifinal":"1/2"
 };
 function roundLabel(m){
   if(!m) return "";
-  if(m.group) return m.group.replace("Group ","Гр. ");
+  if(m.group) return m.group.replace("Group ", t().grPrefix);
+  if(m.round==="Final") return t().final;
+  if(m.round==="Match for third place") return t().roundThird;
   return ROUND[m.round] || m.round || "";
 }
 
@@ -824,17 +930,54 @@ async function load(){
     buildGroups();
     const now=new Date();
     document.getElementById("upd").textContent =
-      "оновлено "+now.toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"});
+      t().updated(now.toLocaleTimeString(locale(),{hour:"2-digit",minute:"2-digit"}));
   }catch(e){
-    document.getElementById("upd").textContent = "помилка оновлення";
+    document.getElementById("upd").textContent = t().updateError;
     if(!Object.keys(byNum).length){
-      document.getElementById("bracket").innerHTML =
-        `<div class="err">Не вдалося завантажити дані (${e.message}).<br>
-         Якщо відкрили файл подвійним кліком і не вантажиться — запустіть локальний сервер:<br>
-         <code>python3 -m http.server</code> у цій теці та відкрийте
-         <code>http://localhost:8000</code>, або викладіть на GitHub Pages.</div>`;
+      document.getElementById("bracket").innerHTML = t().loadErr(e.message);
     }
   }
+}
+
+// ---- застосувати статичні написи (шапка, вкладки, легенди, футер) для поточної мови ----
+function applyStatic(){
+  const T=t(), sep='<span class="sep">·</span>';
+  document.title=T.title;
+  document.documentElement.lang=lang;
+  const h1=document.getElementById("h1"); if(h1) h1.textContent=T.h1+" · USA / Canada / Mexico";
+  const sub=document.querySelector(".sub"); if(sub) sub.textContent=T.sub;
+  const tb=document.getElementById("tab-br"); if(tb) tb.textContent=T.tabBracket;
+  const ts=document.getElementById("tab-sc"); if(ts) ts.textContent=T.tabSchedule;
+  const tg=document.getElementById("tab-gr"); if(tg) tg.textContent=T.tabGroups;
+  const lb=document.getElementById("leg-br"); if(lb) lb.innerHTML=[
+    `<span>${T.legWinnerGold}</span>`, `<span style="color:var(--green)">${T.legPub}</span>`,
+    `<span>${T.legDim}</span>`, `<span>${T.legClick}</span>`].join(sep);
+  const ls=document.getElementById("leg-sc"); if(ls) ls.innerHTML=[
+    `<span>${T.legTime(tzLabel())}</span>`, `<span style="color:var(--green)">${T.legPub}</span>`,
+    `<span>${T.legNight}</span>`, `<span>${T.legToday}</span>`, `<span>${T.legPlayed}</span>`].join(sep);
+  const lg=document.getElementById("leg-gr"); if(lg) lg.innerHTML=[
+    `<span>${T.legGroups}</span>`, `<span>${T.legGreen}</span>`, `<span>${T.legYellow}</span>`].join(sep);
+  const ft=document.querySelector("footer"); if(ft) ft.textContent=T.footer;
+  const upd=document.getElementById("upd"); if(upd && !allMatches.length) upd.textContent=T.loading;
+  buildLangSwitch();
+  setHeaderH();
+}
+function buildLangSwitch(){
+  const box=document.getElementById("lang"); if(!box) return;
+  box.innerHTML="";
+  SUPPORTED.forEach(l=>{
+    const b=document.createElement("button"); b.textContent=LANGNAME[l];
+    if(l===lang) b.className="on";
+    b.onclick=()=>setLang(l);
+    box.appendChild(b);
+  });
+}
+function setLang(l){
+  if(!SUPPORTED.includes(l) || l===lang) return;
+  lang=l; try{ localStorage.setItem("wc_lang", l); }catch(e){}
+  applyStatic();
+  // перемалювати динамічні вкладки з наявними даними
+  buildBracket(); buildSchedule(); buildGroups();
 }
 // висота шапки → змінна для липких відступів (підвкладки, заголовки днів)
 function setHeaderH(){
@@ -853,6 +996,7 @@ function setHeaderH(){
   window.addEventListener("load", setHeaderH);
 })();
 
+applyStatic();      // мова з браузера (або збережена) + написи
 load();
 setInterval(load, 60000);
 </script>
