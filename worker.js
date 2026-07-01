@@ -1,8 +1,16 @@
-// Cloudflare Pages Function → маршрут /event.ics
-// Віддає одну подію матчу як text/calendar, щоб webcal:// відкривав її
-// одразу в Apple Calendar (без завантаження файлу). Дані приходять у query.
-export function onRequestGet({ request }) {
-  const q = new URL(request.url).searchParams;
+// Cloudflare Worker перед статичними ассетами.
+// /event.ics → генерує подію матчу як text/calendar (для webcal:// на iOS/macOS).
+// Решта запитів → віддаються зі статичних ассетів (env.ASSETS).
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/event.ics") return eventIcs(url);
+    return env.ASSETS.fetch(request);
+  }
+};
+
+function eventIcs(url) {
+  const q = url.searchParams;
   const get = (k, d = "") => (q.get(k) || d);
   const esc = s => String(s)
     .replace(/\\/g, "\\\\").replace(/\n/g, "\\n")
@@ -13,10 +21,9 @@ export function onRequestGet({ request }) {
   const title = get("title", "Матч ЧС-2026");
   const desc  = get("desc");
   const loc   = get("loc");
-  const uid   = (get("uid", "wc2026-" + start)) + "@wawa-worldcup";
+  const uid   = get("uid", "wc2026-" + start) + "@wawa-worldcup";
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 
-  // мінімальна валідація часу (…T…Z), щоб не віддавати сміття
   const okTime = t => /^\d{8}T\d{6}Z$/.test(t);
   if (!okTime(start) || !okTime(end)) {
     return new Response("bad start/end", { status: 400 });
