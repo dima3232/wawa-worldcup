@@ -553,13 +553,13 @@ function showGoals(m, num){
         <div class="cal-row">
           <a class="cal-opt" href="${googleCalUrl(m)}" target="_blank" rel="noopener">📅 Google</a>
           <a class="cal-opt" href="${outlookCalUrl(m)}" target="_blank" rel="noopener">📧 Outlook</a>
-          <button class="cal-opt apple-ics">🍎 Apple</button>
+          <a class="cal-opt" href="${appleWebcalUrl(m)}">🍎 Apple</a>
         </div>
-        <div class="cal-hint">Google / Outlook — одразу пропонують подію; Apple — файл .ics</div>`
+        <div class="cal-hint">Усі три одразу відкривають подію в календарі. <a href="#" class="ics-fallback">Завантажити .ics</a></div>`
         : `<span class="cal-note">Час матчу ще уточнюється</span>`}
     </div>`;
   card.querySelector(".modal-x").onclick=closeModal;
-  const cb=card.querySelector(".apple-ics"); if(cb) cb.onclick=()=>addToCalendar(m, num);
+  const fb=card.querySelector(".ics-fallback"); if(fb) fb.onclick=e=>{ e.preventDefault(); addToCalendar(m, num); };
   modalEl.classList.add("show");
 }
 
@@ -599,7 +599,14 @@ function outlookCalUrl(m){
     body:e.desc, location:e.loc});
   return "https://outlook.live.com/calendar/0/deeplink/compose?"+p.toString();
 }
-// Apple / iCal — без бекенду лишається .ics (Blob + download)
+// Apple — webcal:// на наш ендпоінт /event.ics (Calendar сам відкриє подію, без файлу)
+function appleWebcalUrl(m){
+  const e=calEvent(m); if(!e) return "#";
+  const p=new URLSearchParams({title:e.title, start:icsStamp(e.start), end:icsStamp(e.end),
+    desc:e.desc, loc:e.loc, uid:"m"+(m.num||"")});
+  return "webcal://"+location.host+"/event.ics?"+p.toString();
+}
+// запасний варіант — завантажити .ics файл (Blob), якщо webcal чомусь не спрацював
 function addToCalendar(m, num){
   const e=calEvent(m); if(!e) return;
   const ics=[
