@@ -86,10 +86,10 @@ function listTtl(matches) {
 // ---- список матчів ЧС (маппінг назв → matchId + рахунок/статус), кеш у KV ----
 async function getMatchList(env) {
   const cached = await env.WC_STATS.get("hl:matches", "json");
-  if (cached && (Date.now() - cached.ts) < listTtl(cached.matches)) return cached.matches;
-  if ((await budgetLeft(env)) <= 2) return cached ? cached.matches : [];
+  if (cached && cached.v === 2 && (Date.now() - cached.ts) < listTtl(cached.matches)) return cached.matches;
+  if ((await budgetLeft(env)) <= 2) return cached && cached.v === 2 ? cached.matches : [];
   const r = await hlFetch(env, `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=100`);
-  if (!r || !Array.isArray(r.data)) return cached ? cached.matches : [];
+  if (!r || !Array.isArray(r.data)) return cached && cached.v === 2 ? cached.matches : [];
   const matches = r.data.map(m => {
     const st = m.state || {}, sc = st.score || {};
     return {
@@ -100,7 +100,7 @@ async function getMatchList(env) {
       status: st.description || "", clock: st.clock == null ? null : st.clock
     };
   });
-  await env.WC_STATS.put("hl:matches", JSON.stringify({ ts: Date.now(), matches }));
+  await env.WC_STATS.put("hl:matches", JSON.stringify({ v: 2, ts: Date.now(), matches }));
   return matches;
 }
 
@@ -141,14 +141,15 @@ async function pollLive(env) {
   const todayYmd = new Date().toISOString().slice(0, 10);
   const todayCount = matches.filter(m => m.date === todayYmd).length || 1;
   const intervalMs = clamp(Math.ceil(todayCount * 120 / 80), 5, 10) * 60 * 1000;
+  let backfilled = 0;                                   // не більше N добору завершених за прогін
   for (const m of matches) {
-    if ((await budgetLeft(env)) <= 2) break;
+    if ((await budgetLeft(env)) <= 4) break;            // лишаємо запас на список і лайв
     if (!m.ts || now < m.ts) continue;                 // ще не почався
     const rec = await env.WC_STATS.get("stats:" + m.id, "json");
     if (now < m.ts + FINAL_MS) {                        // йде (враховуючи ЕТ/пенальті)
       if (!rec || (now - rec.updated) >= intervalMs) await fetchStats(env, m, false);
-    } else {                                            // завершено → фіналізуємо один раз
-      if (!rec || !rec.final) await fetchStats(env, m, true);
+    } else {                                            // завершено → добираємо поступово (≤5/прогін)
+      if ((!rec || !rec.final) && backfilled < 5) { await fetchStats(env, m, true); backfilled++; }
     }
   }
 }
