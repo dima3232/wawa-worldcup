@@ -61,10 +61,17 @@ async function budgetLeft(env) {
   const v = await env.WC_STATS.get("hl:remaining", "json");
   return v && v.d === today() ? v.rem : DAILY_BUDGET;   // невідомо/новий день → дозволяємо
 }
+// ключ працює і як звичайний Secret (рядок), і як прив'язка Secrets Store (об'єкт з .get())
+async function hlKey(env) {
+  const b = env.HIGHLIGHTLY_KEY;
+  if (!b) return null;
+  return typeof b.get === "function" ? await b.get() : b;
+}
 async function hlFetch(env, path) {
-  if (!env.HIGHLIGHTLY_KEY) return null;
+  const key = await hlKey(env);
+  if (!key) return null;
   try {
-    const r = await fetch(HL_BASE + path, { headers: { "x-rapidapi-key": env.HIGHLIGHTLY_KEY } });
+    const r = await fetch(HL_BASE + path, { headers: { "x-rapidapi-key": key } });
     const rem = r.headers.get("x-ratelimit-requests-remaining");
     if (rem != null) await env.WC_STATS.put("hl:remaining", JSON.stringify({ d: today(), rem: +rem }), { expirationTtl: 172800 });
     return r.ok ? await r.json() : null;

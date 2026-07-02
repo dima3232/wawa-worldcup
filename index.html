@@ -80,6 +80,8 @@
   .match.pub .meta,.meta.pub{color:var(--green);background:rgba(63,208,125,.12)}
   .match.live{border-color:var(--red)}
   .match.live .meta{color:var(--red)}
+  .match.focus-flash{animation:focusFlash 1.6s ease-out}
+  @keyframes focusFlash{0%{box-shadow:0 0 0 0 rgba(255,107,107,.6)}100%{box-shadow:0 0 0 8px rgba(255,107,107,0)}}
   .badge-live{color:#fff;background:var(--red);border-radius:4px;padding:0 5px;font-weight:700;font-size:9px;letter-spacing:.5px}
 
   /* фінальна колонка: кубок + чемпіон + фінал + матч за 3-тє місце */
@@ -507,7 +509,34 @@ function buildBracket(){
   });
   root.appendChild(rounds);
   buildRoundTabs();
-  requestAnimationFrame(()=>{ layoutBracket(); drawConnectors(); });
+  requestAnimationFrame(()=>{ layoutBracket(); drawConnectors(); autofocusLive(); });
+}
+
+// автофокус на живій парі: один раз на матч, лише на вкладці сітки, найраніший live
+let focusedLive = new Set();
+function autofocusLive(){
+  const brView=document.getElementById("view-br");
+  if(!brView || !brView.classList.contains("active")) return;
+  const lives = Object.values(byNum)
+    .filter(m=>m && !m.group && liveInfo(m).live)
+    .sort((a,b)=>((cetDate(a.date,a.time)?.getTime())||0)-((cetDate(b.date,b.time)?.getTime())||0));
+  if(!lives.length) return;
+  // якщо якусь із ЗАРАЗ живих пар уже показували — не перехоплювати (без стрибків між паралельними матчами)
+  if(lives.some(m=>focusedLive.has(m.num))) return;
+  const target = lives[0];                 // найраніший live
+  focusedLive.add(target.num);
+  focusMatch(target.num);
+}
+function focusMatch(num){
+  const br=document.getElementById("bracket");
+  const card=document.getElementById("m"+num);
+  if(!br || !card) return;
+  const col=card.closest(".round-col");
+  if(col){ br.scrollTo({left: col.offsetLeft-10, behavior:"smooth"}); setActiveTab(col.dataset.round); }
+  const top = window.scrollY + card.getBoundingClientRect().top - 150;
+  window.scrollTo({top: Math.max(0,top), behavior:"smooth"});
+  card.classList.add("focus-flash");
+  setTimeout(()=>card.classList.remove("focus-flash"), 1600);
 }
 
 // ---- підвкладки раундів (ESPN-стиль): липкі, гортаються, фокус по тапу ----
