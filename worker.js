@@ -55,18 +55,18 @@ const isKO = r => !!r && !/group/i.test(r);
 const tokset = s => ((s || "").toLowerCase().match(/[a-z]+/g) || []).sort().join(" ");
 const pairKey = (a, b) => [tokset(a), tokset(b)].sort().join("|");
 
-// ---- денний бюджет запитів у KV ----
-function budgetKey() { return "budget:" + new Date().toISOString().slice(0, 10); }
-async function budgetLeft(env) { return DAILY_BUDGET - (+(await env.WC_STATS.get(budgetKey())) || 0); }
-async function spend(env, n = 1) {
-  const k = budgetKey(), cur = +(await env.WC_STATS.get(k)) || 0;
-  await env.WC_STATS.put(k, String(cur + n), { expirationTtl: 172800 });
+// ---- денний бюджет: за РЕАЛЬНИМ залишком з відповіді Highlightly (без власного лічильника) ----
+const today = () => new Date().toISOString().slice(0, 10);
+async function budgetLeft(env) {
+  const v = await env.WC_STATS.get("hl:remaining", "json");
+  return v && v.d === today() ? v.rem : DAILY_BUDGET;   // невідомо/новий день → дозволяємо
 }
 async function hlFetch(env, path) {
   if (!env.HIGHLIGHTLY_KEY) return null;
-  await spend(env, 1);
   try {
     const r = await fetch(HL_BASE + path, { headers: { "x-rapidapi-key": env.HIGHLIGHTLY_KEY } });
+    const rem = r.headers.get("x-ratelimit-requests-remaining");
+    if (rem != null) await env.WC_STATS.put("hl:remaining", JSON.stringify({ d: today(), rem: +rem }), { expirationTtl: 172800 });
     return r.ok ? await r.json() : null;
   } catch (e) { return null; }
 }
