@@ -88,10 +88,12 @@ function listTtl(matches) {
 // ---- список матчів ЧС (маппінг назв → matchId + рахунок/статус), кеш у KV ----
 async function getMatchList(env) {
   const cached = await env.WC_STATS.get("hl:matches", "json");
-  if (cached && cached.v === 2 && (Date.now() - cached.ts) < listTtl(cached.matches)) return cached.matches;
-  if ((await budgetLeft(env)) <= 2) return cached && cached.v === 2 ? cached.matches : [];
+  // кеш валідний лише якщо він v2 і НЕ порожній (порожній не віддаємо і не тримаємо)
+  const validCache = cached && cached.v === 2 && cached.matches && cached.matches.length ? cached.matches : null;
+  if (validCache && (Date.now() - cached.ts) < listTtl(validCache)) return validCache;
+  if ((await budgetLeft(env)) <= 2) return validCache || [];
   const r = await hlFetch(env, `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=100`);
-  if (!r || !Array.isArray(r.data)) return cached && cached.v === 2 ? cached.matches : [];
+  if (!r || !Array.isArray(r.data)) return validCache || [];
   const matches = r.data.map(m => {
     const st = m.state || {}, sc = st.score || {};
     return {
@@ -102,7 +104,7 @@ async function getMatchList(env) {
       status: st.description || "", clock: st.clock == null ? null : st.clock
     };
   });
-  await env.WC_STATS.put("hl:matches", JSON.stringify({ v: 2, ts: Date.now(), matches }));
+  if (matches.length) await env.WC_STATS.put("hl:matches", JSON.stringify({ v: 2, ts: Date.now(), matches }));
   return matches;
 }
 
