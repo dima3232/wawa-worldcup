@@ -16,6 +16,9 @@ Worker adds calendar events and live match statistics.
   clean, parallel lines, so you can see at a glance who plays whom (and when) next.
 - **LIVE badge** — lights up only during a match's time window (clock-driven,
   independent of the data feed).
+- **Live autofocus** — when a knockout match is in its live window, the bracket
+  scrolls it into view once (the earliest live pair, without hijacking as you browse)
+  with a brief highlight, so the game in progress is front and centre.
 - **Local time & language** — times and dates use the visitor's **own timezone and
   locale** (via `Intl`). The UI language is auto-detected from the browser
   (**Ukrainian / English**) with a manual switcher; the choice is kept in `localStorage`.
@@ -73,10 +76,12 @@ GitHub repo on every push to `main`.
   - `/scores` — all match scores/status in one call (openfootball backup);
   - a **cron trigger** polls live knockout matches and backfills finished ones.
 - [`wrangler.jsonc`](wrangler.jsonc) wires the assets binding, the `WC_STATS` KV
-  namespace and the cron; [`.assetsignore`](.assetsignore) keeps source/config files
-  out of the public asset set.
-- The Highlightly API key is stored as the Worker secret `HIGHLIGHTLY_KEY` (never in
-  the repo).
+  namespace, the cron and the `HIGHLIGHTLY_KEY` Secrets Store binding;
+  [`.assetsignore`](.assetsignore) keeps source/config files out of the public asset set.
+- The Highlightly API key lives in **Cloudflare Secrets Store** and is referenced by
+  name from `wrangler.jsonc` (the value is never in the repo). Because the reference is
+  in config, CI deploys re-attach it automatically — a plain dashboard secret would get
+  wiped on redeploy. `worker.js` reads the key from either binding type.
 
 The static part also works on any plain static host (GitHub Pages, Netlify, etc.);
 only the calendar and statistics endpoints require the Worker.
