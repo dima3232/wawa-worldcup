@@ -708,9 +708,14 @@ async function mergeBackupScores(){
     if(!m.team1||!m.team2) return;
     const hl=by[pairKeyC(m.team1,m.team2)]; if(!hl||!hl.score) return;
     const done=/finish|full|ended|aet|pen|after/i.test(hl.status||"");
-    if(done && !(m.score&&m.score.ft)){          // openfootball ще без фіналу → підставляємо
+    if(done){
+      if(!(m.score&&m.score.ft)){                // завершено, openfootball ще без фіналу → підставляємо
+        m.score=Object.assign({}, m.score, {ft:hl.score});
+        if(hl.pens) m.score.p=hl.pens;
+        m._src="hl";
+      }
+    } else if(liveInfo(m).live){                 // матч іде: openfootball фіналів на живому не має → живий рахунок з HL
       m.score=Object.assign({}, m.score, {ft:hl.score});
-      if(hl.pens) m.score.p=hl.pens;
       m._src="hl";
     }
   });
