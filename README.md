@@ -83,6 +83,25 @@ GitHub repo on every push to `main`.
   in config, CI deploys re-attach it automatically — a plain dashboard secret would get
   wiped on redeploy. `worker.js` reads the key from either binding type.
 
+### First-time setup
+
+The static page needs nothing. To enable the stats/backup layer, wire the Worker's
+bindings once (the values are account-specific, so they live in your Cloudflare account,
+not the repo):
+
+1. **KV namespace** — create one (e.g. `WC_STATS`) and put its id in
+   [`wrangler.jsonc`](wrangler.jsonc) under `kv_namespaces` → `id`.
+2. **Secrets Store secret** — in Cloudflare → **Secrets Store**, create a secret named
+   `HIGHLIGHTLY_KEY` with your Highlightly API key as the value (scoped to Workers).
+3. **Reference it** in [`wrangler.jsonc`](wrangler.jsonc) under `secrets_store_secrets`:
+   set `secret_name` to that name and `store_id` to the store's id (a hex string, safe to
+   commit — it's an identifier, not the key). `binding` stays `HIGHLIGHTLY_KEY`.
+4. Do **not** also add a plain dashboard Secret with the same name — a binding name can
+   only be used once, so the deploy would fail on a conflict.
+
+That's it: push to `main` and Workers Builds deploys. The key is re-attached from the
+store on every deploy, so there's nothing to re-enter by hand.
+
 The static part also works on any plain static host (GitHub Pages, Netlify, etc.);
 only the calendar and statistics endpoints require the Worker.
 
