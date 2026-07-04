@@ -9,7 +9,6 @@ export default {
     if (url.pathname === "/event.ics") return eventIcs(url);
     if (url.pathname === "/stats")     return statsRoute(url, env);
     if (url.pathname === "/scores")    return scoresRoute(env);
-    if (url.pathname === "/diag")      return diag(env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(event, env, ctx) {
@@ -61,7 +60,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 async function budgetLeft(env) {
   const v = await env.WC_STATS.get("hl:remaining", "json");
   if (!v || v.d !== today()) return DAILY_BUDGET;                 // невідомо/новий день → дозволяємо
-  if (v.at && (Date.now() - v.at) > 15 * 60000) return DAILY_BUDGET; // лічильник застарів (Worker «замерз») → дозволяємо пробний запит, щоб дізнатись реальний залишок
+  // лічильник застарів або зі старого формату (без at) → дозволяємо пробний запит, щоб дізнатись реальний залишок
+  // (ламає дедлок, коли разовий 429 записав rem:0 і Worker перестав ходити до HL)
+  if (!v.at || (Date.now() - v.at) > 15 * 60000) return DAILY_BUDGET;
   return v.rem;
 }
 // ключ працює і як звичайний Secret (рядок), і як прив'язка Secrets Store (об'єкт з .get())
@@ -79,31 +80,6 @@ async function hlFetch(env, path) {
     if (rem != null) await env.WC_STATS.put("hl:remaining", JSON.stringify({ d: today(), rem: +rem, at: Date.now() }), { expirationTtl: 172800 });
     return r.ok ? await r.json() : null;
   } catch (e) { return null; }
-}
-
-// ТИМЧАСОВИЙ діагностичний роут: не віддає значення ключа, лише статус (видалити після перевірки)
-async function diag(env) {
-  const info = {};
-  const b = env.HIGHLIGHTLY_KEY;
-  info.hasBinding = b != null;
-  info.bindingType = typeof b;
-  info.hasGet = !!(b && typeof b.get === "function");
-  let key = null;
-  try { key = await hlKey(env); info.keyResolved = key != null; info.keyLen = key ? key.length : 0; }
-  catch (e) { info.keyError = String(e && e.message || e).slice(0, 160); }
-  if (key) {
-    try {
-      const r = await fetch(HL_BASE + `/matches?leagueId=${WC_LEAGUE}&season=${WC_SEASON}&limit=1`, { headers: { "x-rapidapi-key": key } });
-      info.testStatus = r.status;
-      info.testRemaining = r.headers.get("x-ratelimit-requests-remaining");
-    } catch (e) { info.testError = String(e && e.message || e).slice(0, 160); }
-  }
-  info.storedBudget = await env.WC_STATS.get("hl:remaining", "json");
-  info.budgetLeft = await budgetLeft(env);
-  const list = await env.WC_STATS.get("hl:matches", "json");
-  info.listAgeMin = list && list.ts ? Math.round((Date.now() - list.ts) / 60000) : null;
-  info.listCount = list && list.matches ? list.matches.length : 0;
-  return json(info);
 }
 
 // "2 - 1" | {current:"2 - 1"} | null  ->  [2,1] | null
