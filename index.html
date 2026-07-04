@@ -423,7 +423,7 @@ function winnerOf(m){
   if(base[1]>base[0]) return 2;
   return 0;
 }
-function isPlayed(m){ return !!scorePair(m); }
+function isPlayed(m){ return !!scorePair(m) && !m._liveScore; }   // живий рахунок з HL — ще не «зіграно»
 
 // рахунок по стороні матчу: {main, pen} або null (матч не зіграно → прочерк)
 function sideScore(m, side){
@@ -716,7 +716,7 @@ async function mergeBackupScores(){
       }
     } else if(liveInfo(m).live){                 // матч іде: openfootball фіналів на живому не має → живий рахунок з HL
       m.score=Object.assign({}, m.score, {ft:hl.score});
-      m._src="hl";
+      m._src="hl"; m._liveScore=true;            // прапорець: рахунок «живий», а не фінал (щоб не гасити live-рамку)
     }
   });
 }
