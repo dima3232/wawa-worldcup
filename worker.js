@@ -59,7 +59,9 @@ const pairKey = (a, b) => [tokset(a), tokset(b)].sort().join("|");
 const today = () => new Date().toISOString().slice(0, 10);
 async function budgetLeft(env) {
   const v = await env.WC_STATS.get("hl:remaining", "json");
-  return v && v.d === today() ? v.rem : DAILY_BUDGET;   // невідомо/новий день → дозволяємо
+  if (!v || v.d !== today()) return DAILY_BUDGET;                 // невідомо/новий день → дозволяємо
+  if (v.at && (Date.now() - v.at) > 15 * 60000) return DAILY_BUDGET; // лічильник застарів (Worker «замерз») → дозволяємо пробний запит, щоб дізнатись реальний залишок
+  return v.rem;
 }
 // ключ працює і як звичайний Secret (рядок), і як прив'язка Secrets Store (об'єкт з .get())
 async function hlKey(env) {
@@ -73,7 +75,7 @@ async function hlFetch(env, path) {
   try {
     const r = await fetch(HL_BASE + path, { headers: { "x-rapidapi-key": key } });
     const rem = r.headers.get("x-ratelimit-requests-remaining");
-    if (rem != null) await env.WC_STATS.put("hl:remaining", JSON.stringify({ d: today(), rem: +rem }), { expirationTtl: 172800 });
+    if (rem != null) await env.WC_STATS.put("hl:remaining", JSON.stringify({ d: today(), rem: +rem, at: Date.now() }), { expirationTtl: 172800 });
     return r.ok ? await r.json() : null;
   } catch (e) { return null; }
 }
@@ -85,11 +87,18 @@ function parseScorePair(v) {
   const mt = String(s).match(/(\d+)\s*[-:]\s*(\d+)/);
   return mt ? [+mt[1], +mt[2]] : null;
 }
-// коротший кеш списку, поки хоч один матч у прямому ефірі (свіжий рахунок), інакше довгий
+// завершений статус матчу в списку HL
+const isDoneStatus = s => /finish|full|ended|aet|pen|after/i.test(s || "");
+// коротший кеш списку, поки є матч, що вже почався, але ще не позначений завершеним у кеші
+// (охоплює і лайв-вікно, і «щойно дограв, а рахунок/статус ще не підтягнувся»); >6 год — здаємось, щоб не крутити вічно
 function listTtl(matches) {
   const now = Date.now();
-  const live = matches.some(m => m.ts && now >= m.ts && now < m.ts + FINAL_MS);
-  return live ? 3 * 60 * 1000 : LIST_TTL_MS;
+  const needs = matches.some(m => {
+    if (!m.ts) return false;
+    const age = now - m.ts;
+    return age >= 0 && age < 6 * 3600 * 1000 && !isDoneStatus(m.status);
+  });
+  return needs ? 3 * 60 * 1000 : LIST_TTL_MS;
 }
 
 // ---- список матчів ЧС (маппінг назв → matchId + рахунок/статус), кеш у KV ----
